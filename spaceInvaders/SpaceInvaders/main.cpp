@@ -8,11 +8,13 @@ using namespace std;
 
 Texture2D spaceshipTexture;
 Texture2D invaderTexture;
+Texture2D heartTexture;
 const int screen_width = 1000;
 const int screen_height = 800;
 bool gameOver = false;
 bool gameWon = false;
 int score = 0;
+int level = 1;
 
 
 double lastUpdateTime = 0;
@@ -40,16 +42,36 @@ public:
     int width = 65;
     int height = 65;
     deque<Vector2> laserDeque;
+    int playerLives = 3;
+    float heartX = 10;
+    float heartY = 10;
+    float laserCooldown = 1;
+    bool canShoot = true;
 
     void Draw()
     {
+        //ship texture / image
         DrawTextureEx(spaceshipTexture, Vector2{(float)x,(float)y }, 0, 0.2, WHITE);
+        
+        //ship lives
+        for(int i = 0; i < playerLives; i++)
+        {
+            DrawTextureEx(heartTexture, Vector2{heartX,heartY}, 0, 0.05, WHITE);
+            heartX += 70;
+        }
+        heartX = 10;
 
-    for (size_t i = 1; i < laserDeque.size(); i++) {
+    //ship lasers
+    for (size_t i = 0; i < laserDeque.size(); i++) {
         // Update the y position of each laser
         laserDeque[i].y -= 3;
         DrawRectangle(laserDeque[i].x, laserDeque[i].y, 10, 30, WHITE);
     }
+
+    //Ship recoil of Shooting
+    DrawRectangle(GetScreenWidth() - 200, 20, laserCooldown, 50, BLUE);
+    DrawRectangleLines(GetScreenWidth() - 200, 20, 150, 50, WHITE);
+
 
     }
 
@@ -58,6 +80,10 @@ public:
     Image imageShip = LoadImage("image/spaceship.png");
     spaceshipTexture = LoadTextureFromImage(imageShip);
     UnloadImage(imageShip);
+    
+    Image imageHeart = LoadImage("image/heart.png");
+    heartTexture = LoadTextureFromImage(imageHeart);
+    UnloadImage(imageHeart);
     // Initialize the laserDeque with a dummy laser outside the visible area
     laserDeque = {Vector2{-100, -100}};
     }
@@ -65,10 +91,17 @@ public:
     ~Spaceship()
     {
         UnloadTexture(spaceshipTexture);
+        UnloadTexture(heartTexture);
     }
 
     void Update()
     {
+        if (laserCooldown > 0) {
+            laserCooldown--;
+        } else {
+            canShoot = true; // Player can shoot again
+        }
+
         // Remove lasers that have gone above the screen
         for (size_t i = 0; i < laserDeque.size(); i++) 
         {
@@ -87,7 +120,7 @@ public:
         }
         if(IsKeyPressed(KEY_UP))
         {
-            Laser();
+                Laser();
         }
         LimitMovement();
 
@@ -105,14 +138,21 @@ public:
 
     void Laser()
     {
-        // Remove the initial dummy laser if it's the first shot
-        if (laserDeque.size() == 1 && laserDeque[0].x == -100 && laserDeque[0].y == -100) 
+        if(canShoot)
         {
-            laserDeque.pop_front();
+            // Remove the initial dummy laser if it's the first shot
+            if (laserDeque.size() == 1 && laserDeque[0].x == -100 && laserDeque[0].y == -100) 
+            {
+                laserDeque.pop_front();
+            }
+
+            // Add a new laser to the deque
+            laserDeque.push_back(Vector2{(float)x + width / 2 - 6, (float)y - 30});
+
+            laserCooldown = 150;
+            canShoot = false;
         }
 
-        // Add a new laser to the deque
-        laserDeque.push_back(Vector2{(float)x + width / 2 - 6, (float)y - 30});
     }
 };
 
@@ -123,6 +163,8 @@ public:
     deque<Vector2> invaderDeque;
     bool moveDirection;
     deque<Vector2> laserDeque;
+    int invaderAmount = 8;
+    bool levelWon = false;
 
     Invader()
     {
@@ -136,8 +178,8 @@ public:
     moveDirection = false;
     // Initialize the laserDeque with a dummy laser outside the visible area
     laserDeque = {Vector2{-100, -100}};
-
-    for(int i = 0; i <= 26; i++)
+    
+    for(int i = 0; i <= invaderAmount; i++)
     {
         if(x + 100 > GetScreenWidth())
         {
@@ -147,6 +189,7 @@ public:
         invaderDeque.push_back(Vector2{(float)x,(float) y});
         x += 100;
     }
+
     }
 
     ~Invader()
@@ -156,6 +199,26 @@ public:
 
     void Draw()
     {
+        if(levelWon)
+        {
+            level++;
+            invaderAmount += 9;
+            levelWon = false;
+            x = 60;
+            y= 100;
+
+            for(int i = 0; i <= invaderAmount; i++)
+            {
+                if(x + 100 > GetScreenWidth())
+                {
+                    x = 60;
+                    y += 100;
+                }
+                invaderDeque.push_back(Vector2{(float)x,(float) y});
+                x += 100;
+            }
+        }
+
         for(Vector2 invader: invaderDeque)
         {
             DrawTextureEx(invaderTexture, Vector2{invader.x, invader.y}, 0, 0.2, WHITE);
@@ -188,7 +251,13 @@ public:
 
         if(invaderDeque.empty())
         {
-            gameWon = true;
+            levelWon = true;
+
+            if(level == 5)
+            {
+                gameWon = true;
+            }
+
         }
 
     }
@@ -263,7 +332,17 @@ int main()
             Rectangle rec = {(float)invader.laserDeque[i].x, (float)invader.laserDeque[i].y, (float)invader.width, (float)invader.height};
             if(CheckCollisionCircleRec(Vector2{(float)spaceship.x + 20, (float)spaceship.y + 20}, 5, Rectangle(rec)))
             {
-                gameOver = true;
+                if(spaceship.playerLives > 1)
+                {
+                    spaceship.playerLives--;
+                    invader.laserDeque.erase(invader.laserDeque.begin() + i);
+                } else
+                {
+                    spaceship.playerLives--;
+                    gameOver = true;
+                }
+
+
             }
         }
         if(!spaceship.laserDeque.empty())
@@ -301,10 +380,14 @@ int main()
         }
         if(gameOver)
         {
-            DrawText("GAME OVER", screen_width /2 - 400, screen_height - 200, 100, WHITE);
+            DrawText("GAME OVER", screen_width /2 - 300, screen_height - 300, 100, WHITE);
         }
-
-        DrawText(TextFormat("%i", score), screen_width / 2 - 20, 20, 80, WHITE);
+        //Score
+        DrawText(TextFormat("Score: "), 250, 20, 40, WHITE);
+        DrawText(TextFormat("%i", score), 400, 20, 40, WHITE);
+        //Level
+        DrawText(TextFormat("Level: "), 500, 20, 40, WHITE);
+        DrawText(TextFormat("%i", level), 630, 20, 40, WHITE);
 
 
         EndDrawing();
